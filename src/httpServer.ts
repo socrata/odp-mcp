@@ -14,16 +14,70 @@ interface McpServerInternal {
 }
 
 // Type for Zod schema internal structure
-interface ZodSchemaLike {
-  _def?: unknown;
+interface ZodLike {
+  _def?: { typeName?: string; description?: string; innerType?: ZodLike; type?: ZodLike; schema?: ZodLike };
 }
 
-// Extract Zod schema definition safely
-function extractZodDef(schema: unknown): unknown {
-  if (schema && typeof schema === 'object' && '_def' in schema) {
-    return (schema as ZodSchemaLike)._def;
+// Unwrap optional/nullable/default Zod types to get the inner type
+function unwrapZod(zod: ZodLike | undefined): ZodLike | undefined {
+  let current = zod;
+  while (current?._def) {
+    const typeName = current._def.typeName;
+    if (typeName === 'ZodOptional' || typeName === 'ZodNullable' || typeName === 'ZodDefault' || typeName === 'ZodEffects') {
+      current = (current._def.innerType ?? current._def.type ?? current._def.schema) as ZodLike | undefined;
+      continue;
+    }
+    break;
   }
-  return undefined;
+  return current;
+}
+
+function isOptionalZod(zod: ZodLike | undefined): boolean {
+  const typeName = zod?._def?.typeName;
+  return typeName === 'ZodOptional' || typeName === 'ZodNullable' || typeName === 'ZodDefault';
+}
+
+function zodToJsonSchemaType(zod: ZodLike | undefined): Record<string, unknown> {
+  const unwrapped = unwrapZod(zod);
+  const typeName = unwrapped?._def?.typeName;
+  const description = zod?._def?.description ?? unwrapped?._def?.description;
+
+  if (typeName === 'ZodString') return { type: 'string', description };
+  if (typeName === 'ZodNumber') return { type: 'number', description };
+  if (typeName === 'ZodBoolean') return { type: 'boolean', description };
+  if (typeName === 'ZodArray') {
+    const itemType = (unwrapped?._def as { type?: ZodLike })?.type;
+    return { type: 'array', items: zodToJsonSchemaType(itemType), description };
+  }
+  if (typeName === 'ZodObject') return { type: 'object', description };
+  if (typeName === 'ZodUnion' || typeName === 'ZodEnum') return { type: 'string', description };
+  if (typeName === 'ZodUnknown' || typeName === 'ZodAny') return { description };
+
+  return { type: 'string', description };
+}
+
+// Convert a Zod object schema to JSON Schema
+function zodToJsonSchema(zodSchema: { shape?: Record<string, unknown> }): object {
+  if (!zodSchema?.shape) {
+    return { type: 'object', properties: {}, required: [] };
+  }
+  const shape = zodSchema.shape;
+  const properties: Record<string, unknown> = {};
+  const required: string[] = [];
+
+  for (const [key, value] of Object.entries(shape)) {
+    const zodType = value as ZodLike;
+    if (!isOptionalZod(zodType)) {
+      required.push(key);
+    }
+    properties[key] = zodToJsonSchemaType(zodType);
+  }
+
+  return {
+    type: 'object',
+    properties,
+    required,
+  };
 }
 
 export async function startHttpServer(server: McpServer, port: number) {
@@ -102,42 +156,35 @@ export async function startHttpServer(server: McpServer, port: number) {
         return;
       }
 
+      // Helper to build manifest
+      const buildManifest = () => Object.keys(registry).map((name) => {
+        const def = toolDefinitions[name as ToolName];
+        return {
+          name,
+          description: def?.description ?? `Tool: ${name}`,
+          schema: def ? zodToJsonSchema(def.schema) : { type: 'object', properties: {} },
+          example: toolExamples[name],
+        };
+      });
+
       // Manifest of tools: GET /tools
       if (req.method === 'GET' && req.url === '/tools') {
-        const manifest = Object.entries(registry).map(([name, t]) => ({
-          name,
-          description: toolDefinitions[name as ToolName]?.description,
-          schema: extractZodDef(t.inputSchema),
-          example: toolExamples[name],
-        }));
         res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ ok: true, tools: manifest }));
+        res.end(JSON.stringify({ ok: true, tools: buildManifest() }));
         return;
       }
 
       // Manifest alias for compatibility
       if (req.method === 'GET' && req.url === '/manifest') {
-        const manifest = Object.entries(registry).map(([name, t]) => ({
-          name,
-          description: toolDefinitions[name as ToolName]?.description,
-          schema: extractZodDef(t.inputSchema),
-          example: toolExamples[name],
-        }));
         res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ ok: true, tools: manifest }));
+        res.end(JSON.stringify({ ok: true, tools: buildManifest() }));
         return;
       }
 
       // Manifest alias for clients that hit /mcp with GET
       if (req.method === 'GET' && req.url === '/mcp') {
-        const manifest = Object.entries(registry).map(([name, t]) => ({
-          name,
-          description: toolDefinitions[name as ToolName]?.description,
-          schema: extractZodDef(t.inputSchema),
-          example: toolExamples[name],
-        }));
         res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ ok: true, tools: manifest }));
+        res.end(JSON.stringify({ ok: true, tools: buildManifest() }));
         return;
       }
 
@@ -170,13 +217,14 @@ export async function startHttpServer(server: McpServer, port: number) {
           }
 
           if (method === 'tools/list') {
-            const tools = Object.entries(registry).map(([name, t]) => ({
-              name,
-              description: (name in toolDefinitions)
-                ? toolDefinitions[name as ToolName].description
-                : `Tool: ${name}`,
-              inputSchema: extractZodDef(t.inputSchema),
-            }));
+            const tools = Object.entries(registry).map(([name]) => {
+              const def = toolDefinitions[name as ToolName];
+              return {
+                name,
+                description: def?.description ?? `Tool: ${name}`,
+                inputSchema: def ? zodToJsonSchema(def.schema) : { type: 'object', properties: {} },
+              };
+            });
             return { jsonrpc: '2.0', id, result: { tools } };
           }
 
