@@ -11,6 +11,12 @@ export async function startHttpServer(server: McpServer, port: number) {
   const registry = (server as any)._registeredTools as Record<string, RegisteredTool> | undefined;
   if (!registry) throw new Error('No tool registry found on MCP server');
 
+  const sendJson = (res: http.ServerResponse, status: number, body: any) => {
+    res.statusCode = status;
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify(body));
+  };
+
   const toolExamples: Record<string, unknown> = {
     list_datasets: {
       domain: 'data.cityofnewyork.us',
@@ -139,28 +145,26 @@ export async function startHttpServer(server: McpServer, port: number) {
       }
 
       if (req.method !== 'POST' || !req.url?.startsWith('/tools/')) {
-        res.statusCode = 404;
-        res.end(JSON.stringify({ error: 'Not found' }));
+        sendJson(res, 404, { error: 'Not found' });
         return;
       }
 
       const name = decodeURIComponent(req.url.split('/')[2] ?? '');
       const tool = registry[name];
       if (!tool) {
-        res.statusCode = 404;
-        res.end(JSON.stringify({ error: `Unknown tool ${name}` }));
+        sendJson(res, 404, { error: `Unknown tool ${name}` });
         return;
       }
 
       const body = await readBody(req);
       const parsedInput = tool.inputSchema ? await tool.inputSchema.parseAsync(body) : body;
       const result = await tool.handler(parsedInput);
-      res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({ ok: true, result }));
+      sendJson(res, 200, { ok: true, result });
     } catch (err: any) {
-      res.statusCode = err?.status && Number.isInteger(err.status) ? err.status : 500;
-      res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({ ok: false, error: err?.message ?? String(err) }));
+      sendJson(res, err?.status && Number.isInteger(err.status) ? err.status : 500, {
+        ok: false,
+        error: err?.message ?? String(err),
+      });
     }
   });
 
