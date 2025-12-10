@@ -45,7 +45,7 @@ async function bootstrap() {
   // Register tools using unified definitions
   server.tool(
     'list_datasets',
-    toolDefinitions.list_datasets.schema.shape,
+    toolDefinitions.list_datasets.schema,
     async (input: z.infer<typeof toolDefinitions.list_datasets.schema>, _extra: unknown) => {
       const res = await listDatasets(getClient(clients, input.domain), input);
       return { content: [{ type: 'text', text: JSON.stringify(extractPayload(res)) }] };
@@ -54,7 +54,7 @@ async function bootstrap() {
 
   server.tool(
     'get_metadata',
-    toolDefinitions.get_metadata.schema.shape,
+    toolDefinitions.get_metadata.schema,
     async (input: z.infer<typeof toolDefinitions.get_metadata.schema>, _extra: unknown) => {
       const res = await getMetadata(getClient(clients, input.domain), input, { cacheTtlMs: config.cacheTtlMs });
       return { content: [{ type: 'text', text: JSON.stringify(extractPayload(res)) }] };
@@ -63,7 +63,7 @@ async function bootstrap() {
 
   server.tool(
     'preview_dataset',
-    toolDefinitions.preview_dataset.schema.shape,
+    toolDefinitions.preview_dataset.schema,
     async (input: z.infer<typeof toolDefinitions.preview_dataset.schema>, _extra: unknown) => {
       const res = await previewDataset(getClient(clients, input.domain), input);
       return { content: [{ type: 'text', text: JSON.stringify(extractPayload(res)) }] };
@@ -72,7 +72,7 @@ async function bootstrap() {
 
   server.tool(
     'query_dataset',
-    toolDefinitions.query_dataset.schema.shape,
+    toolDefinitions.query_dataset.schema,
     async (input: z.infer<typeof toolDefinitions.query_dataset.schema>, _extra: unknown) => {
       const res = await queryDataset(getClient(clients, input.domain), input);
       return { content: [{ type: 'text', text: JSON.stringify(extractPayload(res)) }] };
