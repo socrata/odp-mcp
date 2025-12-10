@@ -32,11 +32,35 @@ function ensureSafeOrderClauses(list?: string[]) {
   }
 }
 
+// Dangerous patterns that could indicate injection attempts
+const DANGEROUS_PATTERNS = [
+  /;/,                           // Statement terminator
+  /--/,                          // SQL comment
+  /\/\*/,                        // Block comment start
+  /\*\//,                        // Block comment end
+  /\bunion\b/i,                  // UNION attacks
+  /\binto\b/i,                   // INTO (data exfiltration)
+  /\bdrop\b/i,                   // DROP statements
+  /\bdelete\b/i,                 // DELETE statements
+  /\binsert\b/i,                 // INSERT statements
+  /\bupdate\b/i,                 // UPDATE statements
+  /\bexec\b/i,                   // EXEC/EXECUTE
+  /\bexecute\b/i,
+  /\bxp_/i,                      // SQL Server extended procedures
+  /\bsp_/i,                      // SQL Server stored procedures
+  /\|\|/,                        // String concatenation (potential injection)
+  /\bchar\s*\(/i,                // CHAR() function (obfuscation)
+  /\bconcat\s*\(/i,              // CONCAT() function (obfuscation)
+  /0x[0-9a-f]+/i,                // Hex-encoded strings
+];
+
 function ensureSafeClause(clause?: string, label = 'clause') {
   if (!clause) return;
-  const lowered = clause.toLowerCase();
-  if (lowered.includes(';') || lowered.includes('--') || lowered.includes('/*') || lowered.includes('*/')) {
-    throw new Error(`Unsafe ${label}`);
+
+  for (const pattern of DANGEROUS_PATTERNS) {
+    if (pattern.test(clause)) {
+      throw new Error(`Unsafe ${label}: potentially dangerous pattern detected`);
+    }
   }
 }
 

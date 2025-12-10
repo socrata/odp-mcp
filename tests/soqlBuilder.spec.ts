@@ -37,4 +37,32 @@ describe('buildSoql', () => {
     expect(() => buildSoqlQuery({ where: "name = 'test'; --" })).toThrow('Unsafe where');
     expect(() => buildSoqlQuery({ where: "name = 'test' /* comment */" })).toThrow('Unsafe where');
   });
+
+  it('rejects SQL injection patterns in where clause', () => {
+    // UNION attacks
+    expect(() => buildSoqlQuery({ where: "1=1 UNION SELECT * FROM users" })).toThrow('Unsafe where');
+    // DROP statements
+    expect(() => buildSoqlQuery({ where: "1=1; DROP TABLE users" })).toThrow('Unsafe where');
+    // DELETE statements
+    expect(() => buildSoqlQuery({ where: "1=1 OR DELETE FROM users" })).toThrow('Unsafe where');
+    // String concatenation
+    expect(() => buildSoqlQuery({ where: "name = 'a' || 'b'" })).toThrow('Unsafe where');
+    // Hex-encoded strings
+    expect(() => buildSoqlQuery({ where: "name = 0x41424344" })).toThrow('Unsafe where');
+    // CHAR obfuscation
+    expect(() => buildSoqlQuery({ where: "name = CHAR(65)" })).toThrow('Unsafe where');
+  });
+
+  it('accepts valid where clauses', () => {
+    // Simple equality
+    expect(() => buildSoqlQuery({ where: "borough = 'MANHATTAN'" })).not.toThrow();
+    // Comparison operators
+    expect(() => buildSoqlQuery({ where: "count > 100 AND status = 'active'" })).not.toThrow();
+    // LIKE patterns
+    expect(() => buildSoqlQuery({ where: "name LIKE '%test%'" })).not.toThrow();
+    // IN clauses
+    expect(() => buildSoqlQuery({ where: "status IN ('open', 'closed')" })).not.toThrow();
+    // Date comparisons
+    expect(() => buildSoqlQuery({ where: "created_date > '2024-01-01'" })).not.toThrow();
+  });
 });
