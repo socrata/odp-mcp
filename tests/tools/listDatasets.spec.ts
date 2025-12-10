@@ -55,7 +55,7 @@ describe('listDatasets tool', () => {
     ]);
     const res = await listDatasets(client as any, { domain: 'example.org', limit: 1 });
     expect(res.data.datasets[0].id).toBe('abcd');
-    expect(res.data.datasets[0].columns[0].name).toBe('c1');
+    expect((res.data.datasets[0].columns[0] as { name: string }).name).toBe('c1');
     expect(res.data.datasets[0].previewRows.length).toBe(1);
     expect(client.calls[1].path).toBe('/api/views/abcd.json');
     expect(client.calls[2].path).toBe('/resource/abcd.json');

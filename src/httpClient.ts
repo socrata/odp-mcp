@@ -17,6 +17,18 @@ export interface HttpResponse<T = unknown> {
   data: T;
 }
 
+// Custom error class with HTTP status code
+export class HttpError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+    public readonly data?: unknown,
+  ) {
+    super(message);
+    this.name = 'HttpError';
+  }
+}
+
 export class HttpClient {
   private limiter?: { allow: () => boolean };
 
@@ -35,10 +47,10 @@ export class HttpClient {
       attempt += 1;
       try {
         return await this.performRequest<T>(options);
-      } catch (err: any) {
+      } catch (err: unknown) {
         lastError = err;
         const status = this.extractStatus(err);
-        const isRetryable = status === 429 || (status && status >= 500 && status < 600);
+        const isRetryable = status === 429 || (status !== undefined && status >= 500 && status < 600);
         if (!isRetryable || attempt >= maxAttempts) break;
         const backoffMs = 100 * Math.pow(2, attempt - 1);
         await new Promise((r) => setTimeout(r, backoffMs));
@@ -50,9 +62,7 @@ export class HttpClient {
 
   private async performRequest<T>(options: HttpRequestOptions): Promise<HttpResponse<T>> {
     if (this.limiter && !this.limiter.allow()) {
-      const error: any = new Error('HTTP 429: client rate limit exceeded');
-      error.status = 429;
-      throw error;
+      throw new HttpError('HTTP 429: client rate limit exceeded', 429);
     }
 
     const url = this.buildUrl(options.path, options.query);
@@ -82,10 +92,10 @@ export class HttpClient {
       const res = await fetch(url, fetchOpts);
       const text = await res.text();
 
-      let data: any = null;
+      let data: T | string | null = null;
       if (text) {
         try {
-          data = JSON.parse(text);
+          data = JSON.parse(text) as T;
         } catch {
           data = text;
         }
@@ -93,17 +103,14 @@ export class HttpClient {
 
       if (!res.ok) {
         const msg = typeof data === 'string' ? data.slice(0, 200) : JSON.stringify(data).slice(0, 200);
-        const error: any = new Error(`HTTP ${res.status}: ${msg}`);
-        error.status = res.status;
-        error.data = data;
-        throw error;
+        throw new HttpError(`HTTP ${res.status}: ${msg}`, res.status, data);
       }
 
       const headerObj: Record<string, string> = {};
       res.headers.forEach((value, key) => {
         headerObj[key] = value;
       });
-      return { status: res.status, headers: headerObj, data };
+      return { status: res.status, headers: headerObj, data: data as T };
     } finally {
       clearTimeout(timer);
     }
@@ -142,9 +149,15 @@ export class HttpClient {
     }
   }
 
-  private extractStatus(err: any): number | undefined {
-    if (err && typeof err.status === 'number') return err.status;
-    const match = typeof err?.message === 'string' ? err.message.match(/^HTTP (\d{3})/) : null;
-    return match ? Number(match[1]) : undefined;
+  private extractStatus(err: unknown): number | undefined {
+    if (err instanceof HttpError) return err.status;
+    if (err && typeof err === 'object' && 'status' in err && typeof (err as { status: unknown }).status === 'number') {
+      return (err as { status: number }).status;
+    }
+    if (err instanceof Error) {
+      const match = err.message.match(/^HTTP (\d{3})/);
+      return match ? Number(match[1]) : undefined;
+    }
+    return undefined;
   }
 }

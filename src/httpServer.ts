@@ -2,16 +2,36 @@ import * as http from 'node:http';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 interface RegisteredTool {
-  inputSchema?: { parseAsync: (value: unknown) => Promise<any> };
-  handler: (args: any, extra?: any) => Promise<any>;
+  inputSchema?: { parseAsync: (value: unknown) => Promise<unknown> };
+  handler: (args: unknown, extra?: unknown) => Promise<unknown>;
+}
+
+// Type for accessing MCP SDK internal registry (private API - may change between versions)
+interface McpServerInternal {
+  _registeredTools?: Record<string, RegisteredTool>;
+}
+
+// Type for Zod schema internal structure
+interface ZodSchemaLike {
+  _def?: unknown;
+}
+
+// Extract Zod schema definition safely
+function extractZodDef(schema: unknown): unknown {
+  if (schema && typeof schema === 'object' && '_def' in schema) {
+    return (schema as ZodSchemaLike)._def;
+  }
+  return undefined;
 }
 
 export async function startHttpServer(server: McpServer, port: number) {
   // Access private registry used by McpServer; SDK does not expose a public getter yet.
-  const registry = (server as any)._registeredTools as Record<string, RegisteredTool> | undefined;
+  // WARNING: This relies on internal MCP SDK implementation details.
+  // Pin @modelcontextprotocol/sdk version and test after upgrades.
+  const registry = (server as unknown as McpServerInternal)._registeredTools;
   if (!registry) throw new Error('No tool registry found on MCP server');
 
-  const sendJson = (res: http.ServerResponse, status: number, body: any) => {
+  const sendJson = (res: http.ServerResponse, status: number, body: unknown) => {
     res.statusCode = status;
     res.setHeader('Content-Type', 'application/json');
     res.end(JSON.stringify(body));
@@ -82,13 +102,11 @@ export async function startHttpServer(server: McpServer, port: number) {
 
       // Manifest of tools: GET /tools
       if (req.method === 'GET' && req.url === '/tools') {
-        const manifest = Object.entries(registry).map(([name, t]) => {
-          let schema: unknown = undefined;
-          if ((t.inputSchema as any)?._def) {
-            schema = (t.inputSchema as any)._def;
-          }
-          return { name, schema, example: toolExamples[name] };
-        });
+        const manifest = Object.entries(registry).map(([name, t]) => ({
+          name,
+          schema: extractZodDef(t.inputSchema),
+          example: toolExamples[name],
+        }));
         res.setHeader('Content-Type', 'application/json');
         res.end(JSON.stringify({ ok: true, tools: manifest }));
         return;
@@ -98,7 +116,7 @@ export async function startHttpServer(server: McpServer, port: number) {
       if (req.method === 'GET' && req.url === '/manifest') {
         const manifest = Object.entries(registry).map(([name, t]) => ({
           name,
-          schema: (t.inputSchema as any)?._def,
+          schema: extractZodDef(t.inputSchema),
           example: toolExamples[name],
         }));
         res.setHeader('Content-Type', 'application/json');
@@ -110,7 +128,13 @@ export async function startHttpServer(server: McpServer, port: number) {
       if (req.url === '/mcp' && req.method === 'POST') {
         const body = await readBody(req);
 
-        const handleRpc = async (rpc: any) => {
+        interface JsonRpcRequest {
+          id?: string | number | null;
+          method?: string;
+          params?: { name?: string; arguments?: Record<string, unknown> };
+        }
+
+        const handleRpc = async (rpc: JsonRpcRequest) => {
           const { id, method, params } = rpc ?? {};
           if (!method) {
             return { jsonrpc: '2.0', id, error: { code: -32600, message: 'Invalid Request' } };
@@ -132,7 +156,7 @@ export async function startHttpServer(server: McpServer, port: number) {
             const tools = Object.entries(registry).map(([name, t]) => ({
               name,
               description: undefined,
-              inputSchema: (t.inputSchema as any)?._def,
+              inputSchema: extractZodDef(t.inputSchema),
             }));
             return { jsonrpc: '2.0', id, result: { tools } };
           }
@@ -140,6 +164,9 @@ export async function startHttpServer(server: McpServer, port: number) {
           if (method === 'tools/call') {
             const name = params?.name;
             const args = params?.arguments ?? {};
+            if (!name) {
+              return { jsonrpc: '2.0', id, error: { code: -32004, message: 'Tool name required' } };
+            }
             const tool = registry[name];
             if (!tool) {
               return { jsonrpc: '2.0', id, error: { code: -32004, message: `Unknown tool ${name}` } };
@@ -148,8 +175,9 @@ export async function startHttpServer(server: McpServer, port: number) {
               const parsedInput = tool.inputSchema ? await tool.inputSchema.parseAsync(args) : args;
               const result = await tool.handler(parsedInput);
               return { jsonrpc: '2.0', id, result };
-            } catch (err: any) {
-              return { jsonrpc: '2.0', id, error: { code: -32000, message: err?.message ?? 'Tool error' } };
+            } catch (err: unknown) {
+              const message = err instanceof Error ? err.message : 'Tool error';
+              return { jsonrpc: '2.0', id, error: { code: -32000, message } };
             }
           }
 
@@ -158,10 +186,10 @@ export async function startHttpServer(server: McpServer, port: number) {
 
         if (Array.isArray(body)) {
           const responses = [];
-          for (const rpc of body) responses.push(await handleRpc(rpc));
+          for (const rpc of body) responses.push(await handleRpc(rpc as JsonRpcRequest));
           sendJson(res, 200, responses);
         } else {
-          const response = await handleRpc(body);
+          const response = await handleRpc(body as JsonRpcRequest);
           sendJson(res, 200, response);
         }
         return;
@@ -221,11 +249,12 @@ export async function startHttpServer(server: McpServer, port: number) {
       const parsedInput = tool.inputSchema ? await tool.inputSchema.parseAsync(body) : body;
       const result = await tool.handler(parsedInput);
       sendJson(res, 200, { ok: true, result });
-    } catch (err: any) {
-      sendJson(res, err?.status && Number.isInteger(err.status) ? err.status : 500, {
-        ok: false,
-        error: err?.message ?? String(err),
-      });
+    } catch (err: unknown) {
+      const status = (err && typeof err === 'object' && 'status' in err && typeof (err as { status: unknown }).status === 'number')
+        ? (err as { status: number }).status
+        : 500;
+      const message = err instanceof Error ? err.message : String(err);
+      sendJson(res, status, { ok: false, error: message });
     }
   });
 

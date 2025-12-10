@@ -10,9 +10,9 @@ export interface ListDatasetsInput extends AuthOverrideInput {
 export interface EnrichedDataset {
   id: string;
   name?: string;
-  metadata: any;
-  columns: any[];
-  previewRows: any[];
+  metadata: Record<string, unknown>;
+  columns: unknown[];
+  previewRows: unknown[];
 }
 
 export interface ListDatasetsResult {
