@@ -1,6 +1,7 @@
 import * as http from 'node:http';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { logger, generateRequestId } from './logger.js';
+import { toolDefinitions, type ToolName } from './toolDefinitions.js';
 
 interface RegisteredTool {
   inputSchema?: { parseAsync: (value: unknown) => Promise<unknown> };
@@ -105,6 +106,7 @@ export async function startHttpServer(server: McpServer, port: number) {
       if (req.method === 'GET' && req.url === '/tools') {
         const manifest = Object.entries(registry).map(([name, t]) => ({
           name,
+          description: toolDefinitions[name as ToolName]?.description,
           schema: extractZodDef(t.inputSchema),
           example: toolExamples[name],
         }));
@@ -117,6 +119,7 @@ export async function startHttpServer(server: McpServer, port: number) {
       if (req.method === 'GET' && req.url === '/manifest') {
         const manifest = Object.entries(registry).map(([name, t]) => ({
           name,
+          description: toolDefinitions[name as ToolName]?.description,
           schema: extractZodDef(t.inputSchema),
           example: toolExamples[name],
         }));
