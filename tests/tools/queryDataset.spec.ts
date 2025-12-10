@@ -19,7 +19,7 @@ describe('queryDataset tool', () => {
       select: ['a', 'b'],
       limit: 5,
     });
-    expect(client.lastCall.query?.$query).toContain('select a, b');
+    expect(client.lastCall.query?.$query).toContain('SELECT a, b');
     expect(client.lastCall.path).toBe('/resource/abcd.json');
   });
 
@@ -33,8 +33,8 @@ describe('queryDataset tool', () => {
       offset: 100000,
     });
     const q = client.lastCall.query?.$query as string;
-    expect(q).toContain('limit 5000');
-    expect(q).toContain('offset 50000');
+    expect(q).toContain('LIMIT 5000');
+    expect(q).toContain('OFFSET 50000');
   });
 
   it('applies default limit when absent', async () => {
