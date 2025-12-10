@@ -233,12 +233,26 @@ export async function startHttpServer(server: McpServer, port: number) {
   console.log(`HTTP MCP bridge listening on port ${port}`);
 }
 
-function readBody(req: http.IncomingMessage): Promise<any> {
+// Maximum request body size (512KB - reasonable for JSON API requests)
+const MAX_BODY_SIZE = 512 * 1024;
+
+class PayloadTooLargeError extends Error {
+  status = 413;
+  constructor() {
+    super('Request body too large');
+    this.name = 'PayloadTooLargeError';
+  }
+}
+
+function readBody(req: http.IncomingMessage): Promise<unknown> {
   return new Promise((resolve, reject) => {
     let data = '';
-    req.on('data', (chunk) => {
+    req.on('data', (chunk: Buffer | string) => {
       data += chunk;
-      if (data.length > 1e6) req.destroy(); // rudimentary guard
+      if (data.length > MAX_BODY_SIZE) {
+        req.destroy();
+        reject(new PayloadTooLargeError());
+      }
     });
     req.on('end', () => {
       if (!data) return resolve({});
