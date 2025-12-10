@@ -7,7 +7,9 @@ export interface GetMetadataInput extends AuthOverrideInput {
   uid: string; // dataset identifier
 }
 
-const metadataCache = new LruCache<string, unknown>(100);
+// Default TTL: 5 minutes (matches ServerConfig.cacheTtlMs default)
+const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000;
+const metadataCache = new LruCache<string, unknown>(100, DEFAULT_CACHE_TTL_MS);
 
 export async function getMetadata(client: HttpClient, input: GetMetadataInput) {
   // SODA metadata via /api/views/<uid>
