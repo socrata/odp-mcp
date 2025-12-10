@@ -19,16 +19,16 @@ export async function startHttpServer(server: McpServer, port: number) {
     },
     get_metadata: {
       domain: 'data.cityofnewyork.us',
-      uid: 'nc67-uf89',
+      uid: 'erm2-nwe9',
     },
     preview_dataset: {
       domain: 'data.cityofnewyork.us',
-      uid: 'nc67-uf89',
+      uid: 'erm2-nwe9',
       limit: 10,
     },
     query_dataset: {
       domain: 'data.cityofnewyork.us',
-      uid: 'nc67-uf89',
+      uid: 'erm2-nwe9',
       select: ['unique_key', 'complaint_type', 'borough'],
       where: "borough = 'MANHATTAN'",
       order: ['created_date DESC'],

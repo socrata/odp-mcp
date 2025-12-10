@@ -29,4 +29,4 @@
 
 ## Security & Configuration Tips
 - Never commit tokens. `SODA_DOMAINS` is optional (pre-warms clients); any domain may be used at call time. Global defaults: `SODA_APP_TOKEN` and `SODA_REQUESTS_PER_HOUR`; per-call overrides: `appToken`, `username`/`password`, `bearerToken`. HTTP bridge gate: `HTTP_API_KEYS` (expects `X-API-Key`).
-- Dataset domain is passed as `domain`; dataset id as `uid` on metadata/preview/query tools. Invoke over HTTP with `POST /tools/{tool}` and JSON body, or via MCP stdio transport.
+- Dataset domain is passed as `domain`; dataset id as `uid` on metadata/preview/query tools (common public example: `domain: data.cityofnewyork.us`, `uid: erm2-nwe9` for NYC 311). Invoke over HTTP with `POST /tools/{tool}` and JSON body, or via MCP stdio transport.

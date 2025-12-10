@@ -26,9 +26,9 @@ Environment variables:
 
 Tool input examples (HTTP POST `/tools/{name}`):
 - list_datasets: `{ "domain": "data.cityofnewyork.us", "query": "311", "limit": 5 }`
-- get_metadata: `{ "domain": "data.cityofnewyork.us", "uid": "nc67-uf89" }`
-- preview_dataset: `{ "domain": "data.cityofnewyork.us", "uid": "nc67-uf89", "limit": 10 }`
-- query_dataset: `{ "domain": "data.cityofnewyork.us", "uid": "nc67-uf89", "select": ["unique_key","complaint_type"], "where": "borough = 'MANHATTAN'", "order": ["created_date DESC"], "limit": 5 }`
+- get_metadata: `{ "domain": "data.cityofnewyork.us", "uid": "erm2-nwe9" }`
+- preview_dataset: `{ "domain": "data.cityofnewyork.us", "uid": "erm2-nwe9", "limit": 10 }`
+- query_dataset: `{ "domain": "data.cityofnewyork.us", "uid": "erm2-nwe9", "select": ["unique_key","complaint_type"], "where": "borough = 'MANHATTAN'", "order": ["created_date DESC"], "limit": 5 }`
 
 Defaults and guards:
 - Limits clamp to max 5000 rows; offsets clamp to 50,000.
