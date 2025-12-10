@@ -106,6 +106,67 @@ export async function startHttpServer(server: McpServer, port: number) {
         return;
       }
 
+      // MCP JSON-RPC over HTTP (minimal, non-streaming)
+      if (req.url === '/mcp' && req.method === 'POST') {
+        const body = await readBody(req);
+
+        const handleRpc = async (rpc: any) => {
+          const { id, method, params } = rpc ?? {};
+          if (!method) {
+            return { jsonrpc: '2.0', id, error: { code: -32600, message: 'Invalid Request' } };
+          }
+
+          if (method === 'initialize') {
+            return {
+              jsonrpc: '2.0',
+              id,
+              result: {
+                protocolVersion: '2025-03-26',
+                capabilities: { tools: {} },
+                serverInfo: { name: 'socrata-soda-mcp', version: '0.1.0' },
+              },
+            };
+          }
+
+          if (method === 'tools/list') {
+            const tools = Object.entries(registry).map(([name, t]) => ({
+              name,
+              description: undefined,
+              inputSchema: (t.inputSchema as any)?._def,
+            }));
+            return { jsonrpc: '2.0', id, result: { tools } };
+          }
+
+          if (method === 'tools/call') {
+            const name = params?.name;
+            const args = params?.arguments ?? {};
+            const tool = registry[name];
+            if (!tool) {
+              return { jsonrpc: '2.0', id, error: { code: -32004, message: `Unknown tool ${name}` } };
+            }
+            try {
+              const parsedInput = tool.inputSchema ? await tool.inputSchema.parseAsync(args) : args;
+              const result = await tool.handler(parsedInput);
+              return { jsonrpc: '2.0', id, result };
+            } catch (err: any) {
+              return { jsonrpc: '2.0', id, error: { code: -32000, message: err?.message ?? 'Tool error' } };
+            }
+          }
+
+          return { jsonrpc: '2.0', id, error: { code: -32601, message: 'Method not found' } };
+        };
+
+        if (Array.isArray(body)) {
+          const responses = [];
+          for (const rpc of body) responses.push(await handleRpc(rpc));
+          sendJson(res, 200, responses);
+        } else {
+          const response = await handleRpc(body);
+          sendJson(res, 200, response);
+        }
+        return;
+      }
+
       // Friendly root page
       if (req.method === 'GET' && req.url === '/') {
         const toolNames = Object.keys(registry);
