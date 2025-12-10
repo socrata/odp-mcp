@@ -1,6 +1,17 @@
 import type { DomainConfig } from './config.js';
 import { RateLimiter } from './rateLimiter.js';
 
+// Default values for HTTP client settings
+const DEFAULT_TIMEOUT_MS = 15000;
+const DEFAULT_MAX_RETRIES = 3;
+const DEFAULT_RETRY_BASE_MS = 100;
+
+export interface HttpClientOptions {
+  timeoutMs?: number;
+  maxRetries?: number;
+  retryBaseMs?: number;
+}
+
 export interface HttpRequestOptions {
   method: 'GET' | 'POST' | 'PUT' | 'DELETE';
   path: string; // path after domain, e.g., "/resource/abcd.json"
@@ -31,19 +42,27 @@ export class HttpError extends Error {
 
 export class HttpClient {
   private limiter?: { allow: () => boolean };
+  private readonly timeoutMs: number;
+  private readonly maxRetries: number;
+  private readonly retryBaseMs: number;
 
-  constructor(private domain: DomainConfig) {
+  constructor(
+    private domain: DomainConfig,
+    options?: HttpClientOptions,
+  ) {
     if (domain.limits?.requestsPerHour) {
       this.limiter = new RateLimiter(domain.limits.requestsPerHour);
     }
+    this.timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    this.maxRetries = options?.maxRetries ?? DEFAULT_MAX_RETRIES;
+    this.retryBaseMs = options?.retryBaseMs ?? DEFAULT_RETRY_BASE_MS;
   }
 
   async request<T>(options: HttpRequestOptions): Promise<HttpResponse<T>> {
-    const maxAttempts = 3;
     let attempt = 0;
     let lastError: unknown;
 
-    while (attempt < maxAttempts) {
+    while (attempt < this.maxRetries) {
       attempt += 1;
       try {
         return await this.performRequest<T>(options);
@@ -51,8 +70,8 @@ export class HttpClient {
         lastError = err;
         const status = this.extractStatus(err);
         const isRetryable = status === 429 || (status !== undefined && status >= 500 && status < 600);
-        if (!isRetryable || attempt >= maxAttempts) break;
-        const backoffMs = 100 * Math.pow(2, attempt - 1);
+        if (!isRetryable || attempt >= this.maxRetries) break;
+        const backoffMs = this.retryBaseMs * Math.pow(2, attempt - 1);
         await new Promise((r) => setTimeout(r, backoffMs));
       }
     }
@@ -74,7 +93,7 @@ export class HttpClient {
     this.attachAuth(headers, options.authOverride);
 
     const controller = new AbortController();
-    const timeout = options.timeoutMs ?? 15000;
+    const timeout = options.timeoutMs ?? this.timeoutMs;
     const timer = setTimeout(() => controller.abort(), timeout);
 
     const fetchOpts: RequestInit = {

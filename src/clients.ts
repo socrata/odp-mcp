@@ -1,18 +1,36 @@
-import { HttpClient } from './httpClient.js';
+import { HttpClient, type HttpClientOptions } from './httpClient.js';
 import type { ServerConfig, DomainConfig } from './config.js';
 
-// Simple client registry keyed by domain; lazily creates clients for new domains.
-export function createClientRegistry(config: ServerConfig): Map<string, HttpClient> {
-  const registry = new Map<string, HttpClient>();
-  config.domains.forEach((domainCfg: DomainConfig) => {
-    registry.set(normalize(domainCfg.domain), new HttpClient(domainCfg));
-  });
-  return registry;
+// Build HTTP client options from server config
+function buildClientOptions(config: ServerConfig): HttpClientOptions {
+  return {
+    timeoutMs: config.httpTimeoutMs,
+    maxRetries: config.httpMaxRetries,
+    retryBaseMs: config.httpRetryBaseMs,
+  };
 }
 
-export function getClient(registry: Map<string, HttpClient>, domain: string): HttpClient {
+// Registry with reference to server config for lazy client creation
+interface ClientRegistry {
+  clients: Map<string, HttpClient>;
+  config: ServerConfig;
+}
+
+// Simple client registry keyed by domain; lazily creates clients for new domains.
+export function createClientRegistry(config: ServerConfig): ClientRegistry {
+  const clients = new Map<string, HttpClient>();
+  const clientOptions = buildClientOptions(config);
+
+  config.domains.forEach((domainCfg: DomainConfig) => {
+    clients.set(normalize(domainCfg.domain), new HttpClient(domainCfg, clientOptions));
+  });
+
+  return { clients, config };
+}
+
+export function getClient(registry: ClientRegistry, domain: string): HttpClient {
   const key = normalize(domain);
-  const existing = registry.get(key);
+  const existing = registry.clients.get(key);
   if (existing) return existing;
 
   // Fallback: allow any domain, using global env defaults (app token, rate limits) if present.
@@ -25,8 +43,9 @@ export function getClient(registry: Map<string, HttpClient>, domain: string): Ht
     limits: envRate ? { requestsPerHour: envRate } : undefined,
   };
 
-  const client = new HttpClient(cfg);
-  registry.set(key, client);
+  const clientOptions = buildClientOptions(registry.config);
+  const client = new HttpClient(cfg, clientOptions);
+  registry.clients.set(key, client);
   return client;
 }
 
