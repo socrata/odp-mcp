@@ -42,37 +42,37 @@ async function bootstrap() {
     return res;
   };
 
-  // Register tools using unified definitions
-  server.tool(
+  // Register tools using unified definitions (provide full Zod schema to preserve root type)
+  server.registerTool(
     'list_datasets',
-    toolDefinitions.list_datasets.schema,
+    { description: toolDefinitions.list_datasets.description, inputSchema: toolDefinitions.list_datasets.schema },
     async (input: z.infer<typeof toolDefinitions.list_datasets.schema>, _extra: unknown) => {
       const res = await listDatasets(getClient(clients, input.domain), input);
       return { content: [{ type: 'text', text: JSON.stringify(extractPayload(res)) }] };
     },
   );
 
-  server.tool(
+  server.registerTool(
     'get_metadata',
-    toolDefinitions.get_metadata.schema,
+    { description: toolDefinitions.get_metadata.description, inputSchema: toolDefinitions.get_metadata.schema },
     async (input: z.infer<typeof toolDefinitions.get_metadata.schema>, _extra: unknown) => {
       const res = await getMetadata(getClient(clients, input.domain), input, { cacheTtlMs: config.cacheTtlMs });
       return { content: [{ type: 'text', text: JSON.stringify(extractPayload(res)) }] };
     },
   );
 
-  server.tool(
+  server.registerTool(
     'preview_dataset',
-    toolDefinitions.preview_dataset.schema,
+    { description: toolDefinitions.preview_dataset.description, inputSchema: toolDefinitions.preview_dataset.schema },
     async (input: z.infer<typeof toolDefinitions.preview_dataset.schema>, _extra: unknown) => {
       const res = await previewDataset(getClient(clients, input.domain), input);
       return { content: [{ type: 'text', text: JSON.stringify(extractPayload(res)) }] };
     },
   );
 
-  server.tool(
+  server.registerTool(
     'query_dataset',
-    toolDefinitions.query_dataset.schema,
+    { description: toolDefinitions.query_dataset.description, inputSchema: toolDefinitions.query_dataset.schema },
     async (input: z.infer<typeof toolDefinitions.query_dataset.schema>, _extra: unknown) => {
       const res = await queryDataset(getClient(clients, input.domain), input);
       return { content: [{ type: 'text', text: JSON.stringify(extractPayload(res)) }] };
