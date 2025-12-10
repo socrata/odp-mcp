@@ -1,5 +1,6 @@
 import * as http from 'node:http';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { logger, generateRequestId } from './logger.js';
 
 interface RegisteredTool {
   inputSchema?: { parseAsync: (value: unknown) => Promise<unknown> };
@@ -164,19 +165,38 @@ export async function startHttpServer(server: McpServer, port: number) {
           if (method === 'tools/call') {
             const name = params?.name;
             const args = params?.arguments ?? {};
+            const requestId = generateRequestId();
             if (!name) {
               return { jsonrpc: '2.0', id, error: { code: -32004, message: 'Tool name required' } };
             }
             const tool = registry[name];
             if (!tool) {
+              logger.warn(`Unknown tool requested: ${name}`, { tool: name, requestId });
               return { jsonrpc: '2.0', id, error: { code: -32004, message: `Unknown tool ${name}` } };
             }
+            const startTime = Date.now();
+            logger.toolRequest(name, args as Record<string, unknown>, requestId);
             try {
               const parsedInput = tool.inputSchema ? await tool.inputSchema.parseAsync(args) : args;
-              const result = await tool.handler(parsedInput);
+              const result = await tool.handler(parsedInput, { requestId });
+              const durationMs = Date.now() - startTime;
+              // Extract row count if result has content array
+              let rowCount: number | undefined;
+              if (result && typeof result === 'object' && 'content' in result) {
+                const content = (result as { content: unknown[] }).content;
+                if (Array.isArray(content) && content[0] && typeof content[0] === 'object' && 'text' in content[0]) {
+                  try {
+                    const parsed = JSON.parse((content[0] as { text: string }).text);
+                    if (Array.isArray(parsed)) rowCount = parsed.length;
+                  } catch { /* ignore parse errors */ }
+                }
+              }
+              logger.toolResponse(name, durationMs, true, rowCount, requestId);
               return { jsonrpc: '2.0', id, result };
             } catch (err: unknown) {
+              const durationMs = Date.now() - startTime;
               const message = err instanceof Error ? err.message : 'Tool error';
+              logger.toolResponse(name, durationMs, false, undefined, requestId, message);
               return { jsonrpc: '2.0', id, error: { code: -32000, message } };
             }
           }
@@ -240,14 +260,26 @@ export async function startHttpServer(server: McpServer, port: number) {
 
       const name = decodeURIComponent(req.url.split('/')[2] ?? '');
       const tool = registry[name];
+      const requestId = generateRequestId();
       if (!tool) {
+        logger.warn(`Unknown tool requested: ${name}`, { tool: name, requestId });
         sendJson(res, 404, { error: `Unknown tool ${name}` });
         return;
       }
 
       const body = await readBody(req);
+      const startTime = Date.now();
+      logger.toolRequest(name, body as Record<string, unknown>, requestId);
       const parsedInput = tool.inputSchema ? await tool.inputSchema.parseAsync(body) : body;
-      const result = await tool.handler(parsedInput);
+      const result = await tool.handler(parsedInput, { requestId });
+      const durationMs = Date.now() - startTime;
+      // Extract row count if result has data array
+      let rowCount: number | undefined;
+      if (result && typeof result === 'object' && 'data' in result) {
+        const data = (result as { data: unknown }).data;
+        if (Array.isArray(data)) rowCount = data.length;
+      }
+      logger.toolResponse(name, durationMs, true, rowCount, requestId);
       sendJson(res, 200, { ok: true, result });
     } catch (err: unknown) {
       const status = (err && typeof err === 'object' && 'status' in err && typeof (err as { status: unknown }).status === 'number')

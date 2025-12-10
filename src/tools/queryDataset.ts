@@ -7,6 +7,7 @@ import {
 } from '../soqlBuilder.js';
 import { clampLimit, clampOffset, DEFAULT_DEFAULT_LIMIT } from '../limits.js';
 import { authFromInput, type AuthOverrideInput } from '../auth.js';
+import { logger } from '../logger.js';
 
 // Extended query input supporting both legacy string-based and new structured formats
 export interface QueryInput extends AuthOverrideInput {
@@ -82,6 +83,7 @@ export async function queryDataset(client: HttpClient, input: QueryInput) {
   // Use $query for full SoQL, or individual params for simpler queries
   if (hasStructured) {
     const soql = buildSoqlQuery(soqlParams);
+    logger.soqlQuery(input.domain, input.uid, soql);
     return client.request({
       method: 'GET',
       path,
@@ -91,6 +93,7 @@ export async function queryDataset(client: HttpClient, input: QueryInput) {
   }
 
   // No structured query - just use limit/offset
+  logger.soqlQuery(input.domain, input.uid, `LIMIT ${safeLimit} OFFSET ${safeOffset}`);
   return client.request({
     method: 'GET',
     path,
