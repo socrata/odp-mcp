@@ -63,11 +63,21 @@ export const logger = {
 
   // Specialized loggers for common operations
   toolRequest: (toolName: string, input: Record<string, unknown>, requestId?: string) => {
-    // Redact sensitive fields
-    const sanitizedInput = { ...input };
-    if (sanitizedInput.password) sanitizedInput.password = '[REDACTED]';
-    if (sanitizedInput.bearerToken) sanitizedInput.bearerToken = '[REDACTED]';
-    if (sanitizedInput.appToken) sanitizedInput.appToken = '[REDACTED]';
+    // Extract only the relevant tool parameters, ignore framework context
+    const relevantKeys = ['domain', 'uid', 'query', 'limit', 'offset', 'select', 'selectFields', 'where', 'whereConditions', 'order', 'group', 'having', 'search'];
+    const sanitizedInput: Record<string, unknown> = {};
+
+    for (const key of relevantKeys) {
+      if (key in input) {
+        sanitizedInput[key] = input[key];
+      }
+    }
+
+    // Note if extra keys were passed (but don't log them)
+    const extraKeys = Object.keys(input).filter(k => !relevantKeys.includes(k));
+    if (extraKeys.length > 0) {
+      sanitizedInput._extraKeysIgnored = extraKeys.length;
+    }
 
     log('info', `Tool request: ${toolName}`, {
       tool: toolName,
