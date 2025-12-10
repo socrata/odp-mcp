@@ -6,47 +6,63 @@ import { listDatasets } from './tools/listDatasets.js';
 import { getMetadata } from './tools/getMetadata.js';
 import { previewDataset } from './tools/previewDataset.js';
 import { queryDataset } from './tools/queryDataset.js';
-import {
-  listDatasetsSchema,
-  getMetadataSchema,
-  previewDatasetSchema,
-  queryDatasetSchema,
-} from './schemas.js';
+import { toolDefinitions, type ToolName } from './toolDefinitions.js';
 
 export interface ToolDefinition {
   name: string;
   description: string;
   schema: object;
-  handler: (input: any) => Promise<unknown>;
+  handler: (input: Record<string, unknown>) => Promise<unknown>;
+}
+
+// Convert Zod schema to JSON Schema format for custom runtimes
+function zodToJsonSchema(zodSchema: { shape: Record<string, unknown> }): object {
+  // The MCP SDK handles Zod schemas directly, but for custom runtimes
+  // we provide a simplified JSON schema representation
+  const shape = zodSchema.shape;
+  const properties: Record<string, unknown> = {};
+  const required: string[] = [];
+
+  for (const [key, value] of Object.entries(shape)) {
+    const zodType = value as { _def?: { typeName?: string; description?: string } };
+    const isOptional = zodType._def?.typeName === 'ZodOptional';
+
+    if (!isOptional) {
+      required.push(key);
+    }
+
+    // Simplified type mapping - custom runtimes should use the Zod schema directly if possible
+    properties[key] = {
+      type: 'string', // Default fallback
+      description: zodType._def?.description,
+    };
+  }
+
+  return {
+    type: 'object',
+    properties,
+    required,
+    additionalProperties: false,
+  };
 }
 
 export function createTools(config: ServerConfig): ToolDefinition[] {
   const registry = createClientRegistry(config);
 
-  return [
-    {
-      name: 'list_datasets',
-      description: 'Search datasets on a configured Socrata domain',
-      schema: listDatasetsSchema,
-      handler: async (input) => listDatasets(getClient(registry, input.domain), input),
-    },
-    {
-      name: 'get_metadata',
-      description: 'Fetch dataset metadata (columns, types, updated at)',
-      schema: getMetadataSchema,
-      handler: async (input) => getMetadata(getClient(registry, input.domain), input),
-    },
-    {
-      name: 'preview_dataset',
-      description: 'Preview first N rows of a dataset',
-      schema: previewDatasetSchema,
-      handler: async (input) => previewDataset(getClient(registry, input.domain), input),
-    },
-    {
-      name: 'query_dataset',
-      description: 'Run a structured SoQL query against a dataset',
-      schema: queryDatasetSchema,
-      handler: async (input) => queryDataset(getClient(registry, input.domain), input),
-    },
-  ];
+  const toolHandlers: Record<ToolName, (input: Record<string, unknown>) => Promise<unknown>> = {
+    list_datasets: async (input) => listDatasets(getClient(registry, input.domain as string), input as unknown as Parameters<typeof listDatasets>[1]),
+    get_metadata: async (input) => getMetadata(getClient(registry, input.domain as string), input as unknown as Parameters<typeof getMetadata>[1]),
+    preview_dataset: async (input) => previewDataset(getClient(registry, input.domain as string), input as unknown as Parameters<typeof previewDataset>[1]),
+    query_dataset: async (input) => queryDataset(getClient(registry, input.domain as string), input as unknown as Parameters<typeof queryDataset>[1]),
+  };
+
+  return (Object.keys(toolDefinitions) as ToolName[]).map((name) => ({
+    name,
+    description: toolDefinitions[name].description,
+    schema: zodToJsonSchema(toolDefinitions[name].schema),
+    handler: toolHandlers[name],
+  }));
 }
+
+// Export unified definitions for direct Zod access
+export { toolDefinitions } from './toolDefinitions.js';
