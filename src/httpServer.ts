@@ -11,6 +11,31 @@ export async function startHttpServer(server: McpServer, port: number) {
   const registry = (server as any)._registeredTools as Record<string, RegisteredTool> | undefined;
   if (!registry) throw new Error('No tool registry found on MCP server');
 
+  const toolExamples: Record<string, unknown> = {
+    list_datasets: {
+      domain: 'data.cityofnewyork.us',
+      query: '311',
+      limit: 5,
+    },
+    get_metadata: {
+      domain: 'data.cityofnewyork.us',
+      uid: 'nc67-uf89',
+    },
+    preview_dataset: {
+      domain: 'data.cityofnewyork.us',
+      uid: 'nc67-uf89',
+      limit: 10,
+    },
+    query_dataset: {
+      domain: 'data.cityofnewyork.us',
+      uid: 'nc67-uf89',
+      select: ['unique_key', 'complaint_type', 'borough'],
+      where: "borough = 'MANHATTAN'",
+      order: ['created_date DESC'],
+      limit: 5,
+    },
+  };
+
   const app = http.createServer(async (req, res) => {
     try {
       // Enforce HTTPS when behind proxy (Heroku)
@@ -42,6 +67,13 @@ export async function startHttpServer(server: McpServer, port: number) {
         return;
       }
 
+      // Readiness probe alias
+      if (req.method === 'GET' && req.url === '/readyz') {
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ ok: true, status: 'ready' }));
+        return;
+      }
+
       // Manifest of tools: GET /tools
       if (req.method === 'GET' && req.url === '/tools') {
         const manifest = Object.entries(registry).map(([name, t]) => {
@@ -49,8 +81,20 @@ export async function startHttpServer(server: McpServer, port: number) {
           if ((t.inputSchema as any)?._def) {
             schema = (t.inputSchema as any)._def;
           }
-          return { name, schema };
+          return { name, schema, example: toolExamples[name] };
         });
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ ok: true, tools: manifest }));
+        return;
+      }
+
+      // Manifest alias for compatibility
+      if (req.method === 'GET' && req.url === '/manifest') {
+        const manifest = Object.entries(registry).map(([name, t]) => ({
+          name,
+          schema: (t.inputSchema as any)?._def,
+          example: toolExamples[name],
+        }));
         res.setHeader('Content-Type', 'application/json');
         res.end(JSON.stringify({ ok: true, tools: manifest }));
         return;
@@ -63,9 +107,11 @@ export async function startHttpServer(server: McpServer, port: number) {
           name: 'Socrata SODA MCP Server',
           description: 'Read-only MCP tools for Socrata SODA datasets (search, metadata, preview, query).',
           endpoints: {
-            tools: '/tools/{tool_name}',
+            mcp: '/mcp',
+            invokeTool: '/tools/{tool_name}',
             manifest: '/tools',
             health: '/healthz',
+            ready: '/readyz',
           },
           capabilities: {
             tools: toolNames,
@@ -74,6 +120,21 @@ export async function startHttpServer(server: McpServer, port: number) {
         };
         res.setHeader('Content-Type', 'application/json');
         res.end(JSON.stringify(body));
+        return;
+      }
+
+      // MCP descriptor alias
+      if (req.method === 'GET' && req.url === '/mcp') {
+        const toolNames = Object.keys(registry);
+        res.setHeader('Content-Type', 'application/json');
+        res.end(
+          JSON.stringify({
+            name: 'Socrata SODA MCP Server',
+            description: 'MCP HTTP bridge; see /tools for manifest',
+            endpoints: { invokeTool: '/tools/{tool_name}', manifest: '/tools', health: '/healthz', ready: '/readyz' },
+            capabilities: { tools: toolNames, resources: [] },
+          }),
+        );
         return;
       }
 

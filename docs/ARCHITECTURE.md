@@ -1,7 +1,7 @@
 # MCP Socrata SODA Server (Draft)
 
 - `src/index.ts` — bootstrap and tool registration.
-- `src/config.ts` — domain-level auth/limits.
+- `src/config.ts` — domain-level auth/limits (optional pre-warm list; any domain accepted at call time).
 - `src/httpClient.ts` — shared HTTP client with retries/timeouts (stubbed).
 - `src/soqlBuilder.ts` — structured → SoQL query string.
 - `src/rateLimiter.ts` — placeholder bucket for per-domain quotas.

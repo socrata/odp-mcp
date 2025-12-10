@@ -16,8 +16,12 @@ describe('client registry', () => {
     expect(client).toBeDefined();
   });
 
-  it('throws on unknown domain', () => {
+  it('lazily creates client for unknown domain with env defaults', () => {
     const registry = createClientRegistry(config);
-    expect(() => getClient(registry, 'unknown.domain')).toThrow(/Unknown domain/);
+    const client = getClient(registry, 'unknown.domain');
+    expect(client).toBeDefined();
+    // subsequent lookups use the same instance
+    const again = getClient(registry, 'unknown.domain');
+    expect(again).toBe(client);
   });
 });

@@ -1,36 +1,32 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-- Runtime code lives in `src/` (entry points, MCP server wiring, tool handlers); keep modules small and single-purpose.
-- Store agent/tool presets in `agents/` with a short README describing inputs and outputs.
-- Mirror source paths under `tests/` with `.spec.ts` files so every module is covered.
-- Put repeatable utilities in `scripts/`; keep them idempotent and add `--help`.
-- Document decisions in `docs/` and keep sample payloads in `fixtures/`.
+- `src/` contains all runtime code: `index.ts` bootstraps the MCP server, `httpServer.ts` exposes the HTTP bridge, `tools/` holds Socrata SODA tools (list, metadata, preview, query), and helpers live in `clients.ts`, `config.ts`, `limits.ts`, `soqlBuilder.ts`, `cache.ts`, `rateLimiter.ts`.
+- `tests/` mirrors source modules (unit + integration) with optional live e2e under `tests/e2e/` gated by env flags.
+- `docs/ARCHITECTURE.md` captures design notes; `README.md` is the user-facing quickstart; `AGENTS.md` is the contributor guide you’re reading.
+- Deployment files: `Procfile` (Heroku), `.env.example` (documented env), `pnpm-lock.yaml` (pinned deps).
 
 ## Build, Test, and Development Commands
-- `pnpm install` — install dependencies (Node.js 20+). Lockfile must be committed.
-- `pnpm dev` — start the local MCP server with hot reload (adapt the command to your entry point).
-- `pnpm test` — run the full Vitest suite; add `--watch` for TDD loops.
-- `pnpm lint` / `pnpm format` — run ESLint and Prettier; fix lint warnings before opening a PR.
-- `pnpm typecheck` — run `tsc --noEmit` to keep types strict.
+- `pnpm install` (Node 20+); if sandboxed, set `PNPM_HOME=/tmp/pnpm PNPM_STORE_PATH=/tmp/pnpm-store`.
+- `pnpm build` → emits JS to `dist/`; `pnpm start` runs the stdio MCP server; `PORT=3000 pnpm start` exposes the HTTP bridge (Heroku/local).
+- `pnpm test` runs Vitest suites; `RUN_E2E=true pnpm test` exercises live SODA calls; `RUN_E2E_MCP=true pnpm test` hits the MCP bridge.
+- `pnpm typecheck` for strict TS; add `pnpm lint` if/when eslint is added.
 
 ## Coding Style & Naming Conventions
-- Language: TypeScript, strict mode enabled; 2-space indentation; single quotes; trailing commas where Prettier applies.
-- Filenames: kebab-case for modules (`agent-registry.ts`); PascalCase for classes/types; camelCase for variables/functions.
-- Prefer named exports; use a default only when the module exposes one primary construct.
-- Isolate I/O (network, filesystem) behind adapters in `src/infra/`; keep business logic pure.
+- TypeScript in strict mode; 2-space indent; single quotes; prefer named exports.
+- Validate all external inputs with Zod schemas; never concatenate raw user strings into SoQL without allowlisting/validation.
+- Keep tool handlers thin: parse input → call domain client → return JSON-safe payload. Shared limits/clamping must come from `limits.ts`.
+- Avoid side effects; tools are read-only by design—do not add write endpoints without ADR + tests.
 
 ## Testing Guidelines
-- Test framework: Vitest. Co-locate tests with the source they cover: `src/tools/file.ts` → `tests/tools/file.spec.ts`.
-- Use fakes over mocks; add contract-style tests for MCP tool inputs/outputs. Store fixtures in `fixtures/`.
-- Aim for ≥80% statement coverage; explain any drop in the PR.
+- Framework: Vitest. Mirror paths (`src/tools/queryDataset.ts` → `tests/tools/queryDataset.spec.ts`).
+- Use fakes over network stubs; live calls stay behind `RUN_E2E*` flags. Include dataset `domain` and `uid` in fixtures to mirror real use.
+- Add regression tests for: auth overrides, rate limiting, SoQL builder safety, limit/offset clamping, and HTTP bridge responses.
 
 ## Commit & Pull Request Guidelines
-- Follow Conventional Commits (`feat: add url scraper tool`, `fix: handle 429 retries`). Use `!` for breaking changes.
-- Keep PRs focused and under ~400 LOC when feasible. Include purpose, key changes, tests run (`pnpm test`, `pnpm lint`), and screenshots/logs when helpful.
-- Link issues in the PR body and reference ADRs when relevant. Rebase onto `master` before requesting review.
+- Conventional Commits (`feat:`, `fix:`, `chore:`). Keep commits small and reviewable; one feature per commit.
+- PR checklist: purpose, key changes, tests run (`pnpm test` + any `RUN_E2E*`), and curl examples if behavior changed. Rebase before requesting review.
 
 ## Security & Configuration Tips
-- Never commit secrets or tokens. Use `.env.example` to document required variables; load via `dotenv` in dev only.
-- Validate external inputs (especially tool arguments) with typed schemas (e.g., Zod) and fail fast.
-- Pin dependencies in `pnpm-lock.yaml`; run `pnpm audit` and patch in a dedicated PR.
+- Never commit tokens. `SODA_DOMAINS` is optional (pre-warms clients); any domain may be used at call time. Global defaults: `SODA_APP_TOKEN` and `SODA_REQUESTS_PER_HOUR`; per-call overrides: `appToken`, `username`/`password`, `bearerToken`. HTTP bridge gate: `HTTP_API_KEYS` (expects `X-API-Key`).
+- Dataset domain is passed as `domain`; dataset id as `uid` on metadata/preview/query tools. Invoke over HTTP with `POST /tools/{tool}` and JSON body, or via MCP stdio transport.

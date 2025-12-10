@@ -13,7 +13,7 @@ import { startHttpServer } from './httpServer.js';
 async function bootstrap() {
   const config = loadConfig();
   if (!config.domains.length) {
-    console.warn('No domains configured; set SODA_DOMAINS before starting the server.');
+    console.warn('No domains preconfigured; set SODA_DOMAINS to pre-warm, or pass domain per call.');
   }
 
   // Optional manifest integrity check
