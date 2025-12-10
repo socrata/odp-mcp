@@ -159,7 +159,9 @@ export async function startHttpServer(server: McpServer, port: number) {
           if (method === 'tools/list') {
             const tools = Object.entries(registry).map(([name, t]) => ({
               name,
-              description: undefined,
+              description: (name in toolDefinitions)
+                ? toolDefinitions[name as ToolName].description
+                : `Tool: ${name}`,
               inputSchema: extractZodDef(t.inputSchema),
             }));
             return { jsonrpc: '2.0', id, result: { tools } };
