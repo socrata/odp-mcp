@@ -8,18 +8,27 @@ pnpm install
 cp .env.example .env   # edit domains/tokens
 pnpm build
 pnpm start             # runs stdio MCP server
+PORT=3000 pnpm start   # runs HTTP bridge on the given port (Heroku/localhost)
 ```
 
 Environment variables:
-- `SODA_DOMAINS`: comma-separated Socrata domains (e.g. `data.cityofnewyork.us`)
-- `SODA_APP_TOKEN`: optional app token applied to all domains
+- `SODA_DOMAINS`: optional comma-separated Socrata domains to pre-warm clients (not required; any domain is allowed at call time)
+- `SODA_APP_TOKEN`: optional app token applied to all domains by default (can be overridden per call)
 - `SODA_REQUESTS_PER_HOUR`: optional client-side throttle per domain
+- `HTTP_API_KEYS`: optional comma-separated keys to protect the HTTP bridge (expects `X-API-Key` header)
+- `MANIFEST_SHA256`: optional sha256 of sorted tool names; startup fails if mismatched
 
 ## Tools
 - `list_datasets(domain, query?, limit?)`
 - `get_metadata(domain, uid)`
 - `preview_dataset(domain, uid, limit?)`
 - `query_dataset(domain, uid, select?, where?, order?, group?, having?, limit?, offset?)`
+
+Tool input examples (HTTP POST `/tools/{name}`):
+- list_datasets: `{ "domain": "data.cityofnewyork.us", "query": "311", "limit": 5 }`
+- get_metadata: `{ "domain": "data.cityofnewyork.us", "uid": "erm2-nwe9" }`
+- preview_dataset: `{ "domain": "data.cityofnewyork.us", "uid": "erm2-nwe9", "limit": 10 }`
+- query_dataset: `{ "domain": "data.cityofnewyork.us", "uid": "erm2-nwe9", "select": ["unique_key","complaint_type"], "where": "borough = 'MANHATTAN'", "order": ["created_date DESC"], "limit": 5 }`
 
 Defaults and guards:
 - Limits clamp to max 5000 rows; offsets clamp to 50,000.
@@ -45,6 +54,13 @@ pnpm exec tsc --noEmit --watch   # optional faster inner-loop typecheck
 - Per-call auth overrides supported on every tool: `appToken`, `username`+`password` (basic), or `bearerToken`.
 - SoQL safety: identifiers validated; limit/offset clamped; `$query` only used when structured clauses present.
 - Rate limiting: optional per-domain client bucket (`SODA_REQUESTS_PER_HOUR`); HTTP client retries 429/5xx with backoff.
+
+## HTTP Endpoints (bridge)
+- `GET /` — friendly descriptor with name/description/endpoints/capabilities.
+- `GET /healthz` and `GET /readyz` — liveness/readiness probes.
+- `GET /tools` or `/manifest` — tool manifest with schemas and examples.
+- `POST /tools/{tool_name}` — invoke a tool; body is the tool input JSON.
+  - Pass dataset domain via `domain` and dataset id via `uid` on metadata/preview/query tools.
 
 ## Implementation Details & Behavior
 - Tools:
