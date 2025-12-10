@@ -128,6 +128,19 @@ export async function startHttpServer(server: McpServer, port: number) {
         return;
       }
 
+      // Manifest alias for clients that hit /mcp with GET
+      if (req.method === 'GET' && req.url === '/mcp') {
+        const manifest = Object.entries(registry).map(([name, t]) => ({
+          name,
+          description: toolDefinitions[name as ToolName]?.description,
+          schema: extractZodDef(t.inputSchema),
+          example: toolExamples[name],
+        }));
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ ok: true, tools: manifest }));
+        return;
+      }
+
       // MCP JSON-RPC over HTTP (minimal, non-streaming)
       if (req.url === '/mcp' && req.method === 'POST') {
         const body = await readBody(req);
