@@ -50,27 +50,27 @@ const whereConditionSchema = z.object({
 // Tool definitions with Zod schemas and descriptions
 export const toolDefinitions = {
   list_datasets: {
-    description: 'Search datasets on a configured Socrata domain',
+    description: 'Search for datasets on any Socrata Open Data portal. REQUIRED: domain parameter must be provided.',
     schema: z.object({
-      domain: z.string().describe('Example: data.cityofnewyork.us'),
-      query: z.string().optional().describe('Search text, e.g. "311"'),
-      limit: z.number().int().min(1).max(DEFAULT_MAX_LIMIT).optional().describe('Max rows to return (default 20)'),
+      domain: z.string().describe('REQUIRED: Socrata domain hostname (e.g., data.cityofnewyork.us, data.cityofchicago.org, data.sfgov.org)'),
+      query: z.string().optional().describe('Search text to filter datasets, e.g. "311" or "crime"'),
+      limit: z.number().int().min(1).max(DEFAULT_MAX_LIMIT).optional().describe('Max results to return (default 20)'),
       ...authParams,
     }),
   },
   get_metadata: {
-    description: 'Fetch dataset metadata (columns, types, updated at)',
+    description: 'Fetch column definitions and metadata for a specific dataset. REQUIRED: domain and uid parameters must be provided.',
     schema: z.object({
-      domain: z.string().describe('Example: data.cityofnewyork.us'),
-      uid: z.string().describe('Dataset UID, e.g. nc67-uf89'),
+      domain: z.string().describe('REQUIRED: Socrata domain hostname (e.g., data.cityofnewyork.us, data.cityofchicago.org)'),
+      uid: z.string().describe('REQUIRED: Dataset unique identifier, a 9-character code like "erm2-nwe9" or "ydr8-5enu"'),
       ...authParams,
     }),
   },
   preview_dataset: {
-    description: 'Preview first N rows of a dataset',
+    description: 'Preview the first N rows of a dataset. REQUIRED: domain and uid parameters must be provided.',
     schema: z.object({
-      domain: z.string().describe('Example: data.cityofnewyork.us'),
-      uid: z.string().describe('Dataset UID, e.g. nc67-uf89'),
+      domain: z.string().describe('REQUIRED: Socrata domain hostname (e.g., data.cityofnewyork.us, data.cityofchicago.org)'),
+      uid: z.string().describe('REQUIRED: Dataset unique identifier, a 9-character code like "erm2-nwe9" or "ydr8-5enu"'),
       limit: z
         .number()
         .int()
@@ -78,15 +78,15 @@ export const toolDefinitions = {
         .max(DEFAULT_MAX_LIMIT)
         .default(DEFAULT_PREVIEW_LIMIT)
         .optional()
-        .describe('Rows to preview (default 50, max 5000)'),
+        .describe('Number of rows to preview (default 50, max 5000)'),
       ...authParams,
     }),
   },
   query_dataset: {
-    description: 'Run a structured SoQL query against a dataset. Supports aggregate functions (sum, count, avg, min, max), transform functions (upper, lower, date_trunc_*), and structured WHERE conditions with operators like BETWEEN, IN, IS NULL, starts_with, and contains.',
+    description: 'Run a SoQL query against a dataset with filtering, aggregation, and sorting. REQUIRED: domain and uid parameters must be provided. Supports aggregate functions (sum, count, avg, min, max), transforms (upper, lower, date_trunc_*), and WHERE conditions (BETWEEN, IN, IS NULL, starts_with, contains).',
     schema: z.object({
-      domain: z.string().describe('Example: data.cityofnewyork.us'),
-      uid: z.string().describe('Dataset UID, e.g. nc67-uf89'),
+      domain: z.string().describe('REQUIRED: Socrata domain hostname (e.g., data.cityofnewyork.us, data.cityofchicago.org)'),
+      uid: z.string().describe('REQUIRED: Dataset unique identifier, a 9-character code like "erm2-nwe9" or "ydr8-5enu"'),
       // Legacy: simple column names
       select: z.array(z.string()).optional().describe('Simple column names to select, e.g. ["unique_key","complaint_type"]'),
       // New: structured select with functions
