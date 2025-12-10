@@ -1,33 +1,41 @@
 import type { HttpClient } from '../httpClient.js';
 import { LruCache } from '../cache.js';
+import { authFromInput, type AuthOverrideInput } from '../auth.js';
 
-export interface GetMetadataInput {
+export interface GetMetadataInput extends AuthOverrideInput {
   domain: string;
   uid: string; // dataset identifier
-  appToken?: string;
-  username?: string;
-  password?: string;
-  bearerToken?: string;
 }
 
-const metadataCache = new LruCache<string, unknown>(100);
+export interface GetMetadataOptions {
+  cacheTtlMs?: number;
+}
 
-export async function getMetadata(client: HttpClient, input: GetMetadataInput) {
+// Default TTL: 5 minutes (matches ServerConfig.cacheTtlMs default)
+const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000;
+
+let metadataCache: LruCache<string, unknown> | null = null;
+let currentTtlMs = DEFAULT_CACHE_TTL_MS;
+
+function getCache(ttlMs?: number): LruCache<string, unknown> {
+  const normalizedTtl = typeof ttlMs === 'number' && Number.isFinite(ttlMs) && ttlMs > 0 ? ttlMs : DEFAULT_CACHE_TTL_MS;
+  if (!metadataCache || normalizedTtl !== currentTtlMs) {
+    metadataCache = new LruCache<string, unknown>(100, normalizedTtl);
+    currentTtlMs = normalizedTtl;
+  }
+  return metadataCache;
+}
+
+export async function getMetadata(client: HttpClient, input: GetMetadataInput, options?: GetMetadataOptions) {
   // SODA metadata via /api/views/<uid>
   const cacheKey = `${input.domain}:${input.uid}`;
-  const cached = metadataCache.get(cacheKey);
+  const cache = getCache(options?.cacheTtlMs);
+  const cached = cache.get(cacheKey);
   if (cached) return cached;
 
   const path = `/api/views/${input.uid}.json`;
   const authOverride = authFromInput(input);
   const response = await client.request({ method: 'GET', path, authOverride });
-  metadataCache.set(cacheKey, response);
+  cache.set(cacheKey, response);
   return response;
-}
-
-function authFromInput(input: { appToken?: string; username?: string; password?: string; bearerToken?: string }) {
-  if (input.appToken) return { mode: 'appToken' as const, appToken: input.appToken };
-  if (input.username && input.password) return { mode: 'basic' as const, username: input.username, password: input.password };
-  if (input.bearerToken) return { mode: 'oauth2' as const, bearerToken: input.bearerToken };
-  return undefined;
 }
