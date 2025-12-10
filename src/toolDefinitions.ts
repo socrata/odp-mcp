@@ -83,14 +83,14 @@ export const toolDefinitions = {
     }),
   },
   query_dataset: {
-    description: 'Run a SoQL query against a dataset with filtering, aggregation, and sorting. REQUIRED: domain and uid parameters must be provided. Supports aggregate functions (sum, count, avg, min, max), transforms (upper, lower, date_trunc_*), and WHERE conditions (BETWEEN, IN, IS NULL, starts_with, contains).',
+    description: 'Run a SoQL query against a dataset with filtering, aggregation, and sorting. REQUIRED: domain and uid parameters must be provided. For aggregations (sum, count, avg, etc.), use selectFields with structured objects, NOT the select array. The select array is ONLY for simple column names.',
     schema: z.object({
       domain: z.string().describe('REQUIRED: Socrata domain hostname (e.g., data.cityofnewyork.us, data.cityofchicago.org)'),
       uid: z.string().describe('REQUIRED: Dataset unique identifier, a 9-character code like "erm2-nwe9" or "ydr8-5enu"'),
       // Legacy: simple column names
-      select: z.array(z.string()).optional().describe('Simple column names to select, e.g. ["unique_key","complaint_type"]'),
+      select: z.array(z.string()).optional().describe('ONLY for simple column names like ["unique_key","complaint_type"]. Do NOT use for aggregates - use selectFields instead.'),
       // New: structured select with functions
-      selectFields: z.array(selectFieldSchema).optional().describe('Structured select fields with aggregate/transform functions and aliases'),
+      selectFields: z.array(selectFieldSchema).optional().describe('USE THIS for aggregations: [{column: "amount", function: "sum", alias: "total"}]. Supported functions: sum, count, avg, min, max, upper, lower, date_trunc_y/ym/ymd'),
       // Legacy: raw where string
       where: z.string().optional().describe("Raw SoQL filter, e.g. \"borough = 'MANHATTAN'\""),
       // New: structured where conditions
