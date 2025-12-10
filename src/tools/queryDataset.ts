@@ -1,14 +1,11 @@
 import type { HttpClient } from '../httpClient.js';
 import { buildSoqlQuery, type SoqlParams } from '../soqlBuilder.js';
 import { clampLimit, clampOffset, DEFAULT_DEFAULT_LIMIT } from '../limits.js';
+import { authFromInput, type AuthOverrideInput } from '../auth.js';
 
-export interface QueryInput extends SoqlParams {
+export interface QueryInput extends SoqlParams, AuthOverrideInput {
   domain: string;
   uid: string;
-  appToken?: string;
-  username?: string;
-  password?: string;
-  bearerToken?: string;
 }
 
 export async function queryDataset(client: HttpClient, input: QueryInput) {
@@ -40,11 +37,4 @@ export async function queryDataset(client: HttpClient, input: QueryInput) {
     query: hasStructured ? { $query: soql } : { $limit: safeLimit, $offset: safeOffset },
     authOverride,
   });
-}
-
-function authFromInput(input: { appToken?: string; username?: string; password?: string; bearerToken?: string }) {
-  if (input.appToken) return { mode: 'appToken' as const, appToken: input.appToken };
-  if (input.username && input.password) return { mode: 'basic' as const, username: input.username, password: input.password };
-  if (input.bearerToken) return { mode: 'oauth2' as const, bearerToken: input.bearerToken };
-  return undefined;
 }

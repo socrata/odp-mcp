@@ -1,13 +1,10 @@
 import type { HttpClient } from '../httpClient.js';
+import { authFromInput, type AuthOverrideInput } from '../auth.js';
 
-export interface ListDatasetsInput {
+export interface ListDatasetsInput extends AuthOverrideInput {
   domain: string;
   query?: string;
   limit?: number;
-  appToken?: string;
-  username?: string;
-  password?: string;
-  bearerToken?: string;
 }
 
 export interface EnrichedDataset {
@@ -68,11 +65,4 @@ export async function listDatasets(client: HttpClient, input: ListDatasetsInput)
     headers: {},
     data: { datasets } satisfies ListDatasetsResult,
   };
-}
-
-function authFromInput(input: { appToken?: string; username?: string; password?: string; bearerToken?: string }) {
-  if (input.appToken) return { mode: 'appToken' as const, appToken: input.appToken };
-  if (input.username && input.password) return { mode: 'basic' as const, username: input.username, password: input.password };
-  if (input.bearerToken) return { mode: 'oauth2' as const, bearerToken: input.bearerToken };
-  return undefined;
 }
