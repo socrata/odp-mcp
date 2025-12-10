@@ -186,8 +186,9 @@ function buildSelectField(field: SelectField | string): string {
 
   // Apply function if specified
   if (field.function) {
-    const args = field.args ? `, ${field.args.join(', ')}` : '';
-    expr = `${field.function}(${expr}${args})`;
+    const args = buildFunctionArgs(field.args);
+    const argsSuffix = args ? `, ${args}` : '';
+    expr = `${field.function}(${expr}${argsSuffix})`;
   }
 
   // Apply alias if specified
@@ -197,6 +198,30 @@ function buildSelectField(field: SelectField | string): string {
   }
 
   return expr;
+}
+
+/**
+ * Ensure a value is numeric (number type) and return it
+ */
+function requireNumeric(value: unknown, label: string): number {
+  if (typeof value !== 'number' || Number.isNaN(value)) {
+    throw new Error(`Expected numeric ${label}`);
+  }
+  return value;
+}
+
+/**
+ * Safely format function arguments by quoting strings and leaving numbers as-is
+ */
+function buildFunctionArgs(args: (string | number)[] | undefined): string {
+  if (!args?.length) return '';
+
+  return args
+    .map((arg) => {
+      if (typeof arg === 'number') return String(arg);
+      return `'${sanitizeValue(arg)}'`;
+    })
+    .join(', ');
 }
 
 /**
@@ -222,19 +247,27 @@ function buildConditionExpression(condition: WhereCondition): string {
 
   // Handle BETWEEN
   if (operator === 'between' || operator === 'not between') {
+    if (condition.value === undefined || condition.value2 === undefined) {
+      throw new Error('BETWEEN operator requires both value and value2');
+    }
     const val1 = condition.valueIsNumeric
-      ? condition.value
+      ? requireNumeric(condition.value, 'value')
       : `'${sanitizeValue(condition.value)}'`;
     const val2 = condition.valueIsNumeric
-      ? condition.value2
+      ? requireNumeric(condition.value2, 'value2')
       : `'${sanitizeValue(condition.value2)}'`;
     return `${column} ${operator.toUpperCase()} ${val1} AND ${val2}`;
   }
 
   // Handle IN / NOT IN
   if ((operator === 'in' || operator === 'not in') && condition.values) {
+    if (!condition.values.length) {
+      throw new Error('IN operator requires a non-empty values array');
+    }
     const vals = condition.values
-      .map((v) => (condition.valueIsNumeric ? v : `'${sanitizeValue(v)}'`))
+      .map((v) =>
+        condition.valueIsNumeric ? requireNumeric(v, 'values') : `'${sanitizeValue(v)}'`,
+      )
       .join(', ');
     return `${column} ${operator.toUpperCase()} (${vals})`;
   }
@@ -253,7 +286,7 @@ function buildConditionExpression(condition: WhereCondition): string {
   if (condition.value === null || condition.value === undefined) {
     return operator === '!=' ? `${column} IS NOT NULL` : `${column} IS NULL`;
   } else if (condition.valueIsNumeric) {
-    valueExpr = String(condition.value);
+    valueExpr = String(requireNumeric(condition.value, 'value'));
   } else {
     valueExpr = `'${sanitizeValue(condition.value)}'`;
     if (condition.valueFunction) {
@@ -284,9 +317,12 @@ function buildWhereClause(
 
     const expressions = where.map((cond) => buildConditionExpression(cond));
 
-    // Group by boolean type
-    const booleanType = where[0].booleanType || 'AND';
-    return expressions.map((e) => `(${e})`).join(` ${booleanType} `);
+    // Combine with boolean type defined on the previous condition (default AND)
+    return expressions.reduce((acc, expr, index) => {
+      if (index === 0) return `(${expr})`;
+      const joiner = where[index - 1].booleanType || 'AND';
+      return `${acc} ${joiner} (${expr})`;
+    }, '');
   }
 
   // Handle single condition

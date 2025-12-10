@@ -1,7 +1,6 @@
 import type { HttpClient } from '../httpClient.js';
 import {
   buildSoqlQuery,
-  buildSoqlParams,
   type SoqlParams,
   type SelectField,
   type WhereCondition,
