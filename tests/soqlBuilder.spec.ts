@@ -53,6 +53,10 @@ describe('buildSoql', () => {
     expect(() => buildSoqlQuery({ where: "name = CHAR(65)" })).toThrow('Unsafe where');
   });
 
+  it('allows safe text containing keywords inside quotes', () => {
+    expect(() => buildSoqlQuery({ where: "incident_address LIKE 'Union Square%'" })).not.toThrow();
+  });
+
   it('accepts valid where clauses', () => {
     // Simple equality
     expect(() => buildSoqlQuery({ where: "borough = 'MANHATTAN'" })).not.toThrow();

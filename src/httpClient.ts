@@ -6,6 +6,11 @@ const DEFAULT_TIMEOUT_MS = 15000;
 const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_RETRY_BASE_MS = 100;
 
+function coercePositiveInt(value: number | undefined, fallback: number, min = 1): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < min) return fallback;
+  return Math.floor(value);
+}
+
 export interface HttpClientOptions {
   timeoutMs?: number;
   maxRetries?: number;
@@ -53,9 +58,9 @@ export class HttpClient {
     if (domain.limits?.requestsPerHour) {
       this.limiter = new RateLimiter(domain.limits.requestsPerHour);
     }
-    this.timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-    this.maxRetries = options?.maxRetries ?? DEFAULT_MAX_RETRIES;
-    this.retryBaseMs = options?.retryBaseMs ?? DEFAULT_RETRY_BASE_MS;
+    this.timeoutMs = coercePositiveInt(options?.timeoutMs, DEFAULT_TIMEOUT_MS, 1);
+    this.maxRetries = coercePositiveInt(options?.maxRetries, DEFAULT_MAX_RETRIES, 1);
+    this.retryBaseMs = coercePositiveInt(options?.retryBaseMs, DEFAULT_RETRY_BASE_MS, 1);
   }
 
   async request<T>(options: HttpRequestOptions): Promise<HttpResponse<T>> {

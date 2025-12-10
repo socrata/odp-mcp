@@ -32,7 +32,7 @@ function ensureSafeOrderClauses(list?: string[]) {
   }
 }
 
-// Dangerous patterns that could indicate injection attempts
+// Dangerous patterns that could indicate injection attempts (checked outside of quoted literals)
 const DANGEROUS_PATTERNS = [
   /;/,                           // Statement terminator
   /--/,                          // SQL comment
@@ -54,11 +54,20 @@ const DANGEROUS_PATTERNS = [
   /0x[0-9a-f]+/i,                // Hex-encoded strings
 ];
 
+// Remove single- and double-quoted string literals to avoid false positives like "Union Square"
+function stripQuotedLiterals(clause: string): string {
+  return clause
+    .replace(/'([^'\\]|\\.)*'/g, '')   // single-quoted
+    .replace(/"([^"\\]|\\.)*"/g, '');  // double-quoted
+}
+
 function ensureSafeClause(clause?: string, label = 'clause') {
   if (!clause) return;
 
+  const sanitized = stripQuotedLiterals(clause);
+
   for (const pattern of DANGEROUS_PATTERNS) {
-    if (pattern.test(clause)) {
+    if (pattern.test(sanitized)) {
       throw new Error(`Unsafe ${label}: potentially dangerous pattern detected`);
     }
   }

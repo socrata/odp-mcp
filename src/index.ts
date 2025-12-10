@@ -9,7 +9,6 @@ import { previewDataset } from './tools/previewDataset.js';
 import { queryDataset } from './tools/queryDataset.js';
 import { toolDefinitions } from './toolDefinitions.js';
 import { startHttpServer } from './httpServer.js';
-import type { HttpResponse } from './httpClient.js';
 
 async function bootstrap() {
   const config = loadConfig();
@@ -57,7 +56,7 @@ async function bootstrap() {
     'get_metadata',
     toolDefinitions.get_metadata.schema.shape,
     async (input: z.infer<typeof toolDefinitions.get_metadata.schema>, _extra: unknown) => {
-      const res = await getMetadata(getClient(clients, input.domain), input);
+      const res = await getMetadata(getClient(clients, input.domain), input, { cacheTtlMs: config.cacheTtlMs });
       return { content: [{ type: 'text', text: JSON.stringify(extractPayload(res)) }] };
     },
   );
