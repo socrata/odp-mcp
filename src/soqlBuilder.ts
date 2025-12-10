@@ -8,13 +8,26 @@ export interface SoqlParams {
   offset?: number;
 }
 
+// Valid SoQL identifier: starts with letter/underscore, followed by letters/digits/underscores
 const IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+// Valid order clause: identifier optionally followed by ASC/DESC (case-insensitive)
+const ORDER_CLAUSE = /^[A-Za-z_][A-Za-z0-9_]*(?:\s+(?:ASC|DESC|asc|desc))?$/;
 
 function ensureSafeIdentifiers(list?: string[]) {
   if (!list) return;
   for (const item of list) {
     if (!IDENT.test(item)) {
       throw new Error(`Unsafe identifier: ${item}`);
+    }
+  }
+}
+
+function ensureSafeOrderClauses(list?: string[]) {
+  if (!list) return;
+  for (const item of list) {
+    if (!ORDER_CLAUSE.test(item.trim())) {
+      throw new Error(`Unsafe order clause: ${item}`);
     }
   }
 }
@@ -30,7 +43,7 @@ function ensureSafeClause(clause?: string, label = 'clause') {
 export function buildSoqlQuery(params: SoqlParams): string {
   // Build a raw SoQL query string (no $ prefixes); caller is responsible for URL encoding.
   ensureSafeIdentifiers(params.select);
-  ensureSafeIdentifiers(params.order);
+  ensureSafeOrderClauses(params.order);
   ensureSafeIdentifiers(params.group);
   ensureSafeClause(params.where, 'where');
   ensureSafeClause(params.having, 'having');
