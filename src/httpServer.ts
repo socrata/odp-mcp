@@ -56,6 +56,27 @@ export async function startHttpServer(server: McpServer, port: number) {
         return;
       }
 
+      // Friendly root page
+      if (req.method === 'GET' && req.url === '/') {
+        const toolNames = Object.keys(registry);
+        const body = {
+          name: 'Socrata SODA MCP Server',
+          description: 'Read-only MCP tools for Socrata SODA datasets (search, metadata, preview, query).',
+          endpoints: {
+            tools: '/tools/{tool_name}',
+            manifest: '/tools',
+            health: '/healthz',
+          },
+          capabilities: {
+            tools: toolNames,
+            resources: [],
+          },
+        };
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify(body));
+        return;
+      }
+
       if (req.method !== 'POST' || !req.url?.startsWith('/tools/')) {
         res.statusCode = 404;
         res.end(JSON.stringify({ error: 'Not found' }));
